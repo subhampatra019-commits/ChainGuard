@@ -1,0 +1,24 @@
+{
+  "name": "chainguard",
+  "version": "1.0.0",
+  "description": "Blockchain-Based Secure Platform for Identity, Access Control and Digital Asset Management",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/subhampatra019-commits/ChainGuard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/subhampatra019-commits/ChainGuard/issues"
+  },
+  "homepage": "https://github.com/subhampatra019-commits/ChainGuard#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
