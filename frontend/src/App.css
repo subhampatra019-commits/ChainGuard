@@ -18,7 +18,10 @@ body {
     #050816;
 }
 
-/* NAVBAR */
+
+/* =========================
+   NAVBAR
+========================= */
 
 .navbar {
   height: 75px;
@@ -49,13 +52,43 @@ body {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
+  transition: 0.25s ease;
 }
 
 .connect-btn:hover {
   background: #6c63ff;
 }
 
-/* HERO */
+
+/* =========================
+   WALLET
+========================= */
+
+.wallet-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wallet-address {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #10152e;
+  border: 1px solid #303866;
+  color: #8dffad;
+  font-size: 14px;
+  font-family: monospace;
+}
+
+.connect-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+
+/* =========================
+   HERO
+========================= */
 
 .hero-section {
   min-height: 570px;
@@ -98,7 +131,10 @@ body {
   margin-bottom: 32px;
 }
 
-/* BUTTONS */
+
+/* =========================
+   BUTTONS
+========================= */
 
 .buttons {
   display: flex;
@@ -111,6 +147,7 @@ body {
   border-radius: 8px;
   font-size: 15px;
   cursor: pointer;
+  transition: 0.25s ease;
 }
 
 .primary-btn {
@@ -121,6 +158,7 @@ body {
 
 .primary-btn:hover {
   background: #817aff;
+  transform: translateY(-2px);
 }
 
 .secondary-btn {
@@ -131,9 +169,13 @@ body {
 
 .secondary-btn:hover {
   border-color: #6c63ff;
+  transform: translateY(-2px);
 }
 
-/* SECURITY CARD */
+
+/* =========================
+   SECURITY CARD
+========================= */
 
 .security-card {
   width: 330px;
@@ -183,7 +225,10 @@ body {
   color: #35d07f;
 }
 
-/* FEATURES */
+
+/* =========================
+   FEATURES
+========================= */
 
 .features {
   display: grid;
@@ -197,6 +242,12 @@ body {
   background: #0b1128;
   border: 1px solid #1c2850;
   border-radius: 14px;
+  transition: 0.25s ease;
+}
+
+.feature:hover {
+  border-color: #6c63ff;
+  transform: translateY(-4px);
 }
 
 .feature-icon {
@@ -214,9 +265,13 @@ body {
   font-size: 14px;
 }
 
-/* MOBILE */
+
+/* =========================
+   MOBILE
+========================= */
 
 @media (max-width: 800px) {
+
   .hero-section {
     flex-direction: column;
     text-align: center;
@@ -232,5 +287,60 @@ body {
 
   .hero-content h1 {
     font-size: 45px;
+  }
+
+  .security-card {
+    width: 100%;
+    max-width: 330px;
+  }
+}
+
+
+/* =========================
+   WALLET MOBILE
+========================= */
+
+@media (max-width: 600px) {
+
+  .navbar {
+    padding: 0 5%;
+  }
+
+  .logo {
+    font-size: 21px;
+  }
+
+  .wallet-section {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+  }
+
+  .wallet-address {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+
+  .connect-btn {
+    padding: 9px 15px;
+    font-size: 12px;
+  }
+
+  .hero-content h1 {
+    font-size: 38px;
+  }
+
+  .hero-content p {
+    font-size: 16px;
+  }
+
+  .buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .primary-btn,
+  .secondary-btn {
+    width: 200px;
   }
 }
