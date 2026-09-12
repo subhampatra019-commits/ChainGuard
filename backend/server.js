@@ -1,277 +1,961 @@
 const express = require("express");
 const multer = require("multer");
 const crypto = require("crypto");
+const fs = require("fs");
+const mongoose = require("mongoose");
+const dns = require("dns");
 require("dotenv").config();
 
 const { ethers } = require("ethers");
+
 const contractABI = require("../blockchain/ChainGuardABI.json");
+const Asset = require("./models/Asset");
 
 const app = express();
-const upload = multer({ dest: "uploads/" });
+
+const upload = multer({
+  dest: "uploads/"
+});
+
+// =========================
+// MIDDLEWARE
+// =========================
 
 app.use(express.json());
 
+// =========================
+// CORS
+// =========================
+
+app.use((req, res, next) => {
+
+  res.header(
+    "Access-Control-Allow-Origin",
+    "*"
+  );
+
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,DELETE,OPTIONS"
+  );
+
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
+
+// =========================
+// SERVER PORT
+// =========================
+
 const PORT = 5000;
 
-const mongoose = require("mongoose");
+// =========================
+// DNS
+// =========================
 
-const provider = new ethers.JsonRpcProvider(
-  process.env.SEPOLIA_RPC_URL
-);
+dns.setServers([
+  "1.1.1.1"
+]);
 
-const wallet = new ethers.Wallet(
-  process.env.PRIVATE_KEY,
-  provider
-);
+// =========================
+// BLOCKCHAIN CONNECTION
+// =========================
 
-const contract = new ethers.Contract(
-  process.env.CONTRACT_ADDRESS,
-  contractABI,
-  wallet
-);
+const provider =
+  new ethers.JsonRpcProvider(
+    process.env.SEPOLIA_RPC_URL
+  );
 
-const dns = require("dns");
-dns.setServers(["1.1.1.1"]);
+const wallet =
+  new ethers.Wallet(
+    process.env.PRIVATE_KEY,
+    provider
+  );
 
-const Asset = require("./models/Asset");
+const contract =
+  new ethers.Contract(
+    process.env.CONTRACT_ADDRESS,
+    contractABI,
+    wallet
+  );
 
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI)
+// =========================
+// MONGODB CONNECTION
+// =========================
+
+mongoose
+  .connect(process.env.MONGO_URI)
+
   .then(() => {
-    console.log("MongoDB connected successfully!");
+
+    console.log(
+      "MongoDB connected successfully!"
+    );
+
   })
+
   .catch((error) => {
-    console.error("MongoDB connection failed:");
-    console.error(error.message);
 
-    if (error.reason && error.reason.servers) {
-      for (const [server, details] of error.reason.servers) {
-        console.error("\nSERVER:", server);
-        console.error("ERROR:", details.error);
+    console.error(
+      "MongoDB connection failed:"
+    );
+
+    console.error(
+      error.message
+    );
+
+  });
+
+// =========================
+// HOME ROUTE
+// =========================
+
+app.get(
+  "/",
+  (req, res) => {
+
+    res.json({
+
+      message:
+        "ChainGuard Backend is running!",
+
+      status:
+        "online",
+
+      port:
+        PORT
+
+    });
+
+  }
+);
+
+// =========================
+// TEST API
+// =========================
+
+app.post(
+  "/api/test",
+  (req, res) => {
+
+    console.log(
+      "\n=============================="
+    );
+
+    console.log(
+      "TEST API REQUEST"
+    );
+
+    console.log(
+      "=============================="
+    );
+
+    res.json({
+
+      message:
+        "Backend API is working!",
+
+      data:
+        req.body
+
+    });
+
+  }
+);
+
+// =========================
+// FILE UPLOAD
+// SHA-256 + MONGODB + BLOCKCHAIN
+// =========================
+
+app.post(
+  "/api/upload",
+
+  upload.single("file"),
+
+  async (req, res) => {
+
+    try {
+
+      if (!req.file) {
+
+        return res.status(400).json({
+
+          message:
+            "No file uploaded"
+
+        });
+
       }
-    }
-  });
 
-// Home route
-app.get("/", (req, res) => {
-  res.send("ChainGuard Backend is running!");
-});
+      // =========================
+      // CREATE SHA-256 HASH
+      // =========================
 
-// File upload + SHA-256 + MongoDB + Blockchain
-app.post("/api/upload", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        message: "No file uploaded"
+      const fileHash =
+        crypto
+          .createHash("sha256")
+          .update(
+            fs.readFileSync(
+              req.file.path
+            )
+          )
+          .digest("hex");
+
+      console.log(
+        "\n=============================="
+      );
+
+      console.log(
+        "FILE UPLOAD"
+      );
+
+      console.log(
+        "=============================="
+      );
+
+      console.log(
+        "File:",
+        req.file.originalname
+      );
+
+      console.log(
+        "Size:",
+        req.file.size
+      );
+
+      console.log(
+        "SHA-256:",
+        fileHash
+      );
+
+      // =========================
+      // SAVE TO MONGODB
+      // =========================
+
+      const asset =
+        new Asset({
+
+          fileName:
+            req.file.originalname,
+
+          filePath:
+            req.file.path,
+
+          fileSize:
+            req.file.size,
+
+          fileHash:
+            fileHash
+
+        });
+
+      await asset.save();
+
+      console.log(
+        "Asset saved to MongoDB."
+      );
+
+      // =========================
+      // REGISTER ON BLOCKCHAIN
+      // =========================
+
+      const tx =
+        await contract.registerAsset(
+          req.file.originalname,
+          fileHash
+        );
+
+      console.log(
+        "Blockchain transaction sent!"
+      );
+
+      console.log(
+        "Transaction hash:",
+        tx.hash
+      );
+
+      const receipt =
+        await tx.wait();
+
+      console.log(
+        "Blockchain transaction confirmed!"
+      );
+
+      // =========================
+      // GET ACTUAL ASSET ID
+      // =========================
+
+      const blockchainAssetCount =
+        await contract.assetCount();
+
+      const assetId =
+        Number(blockchainAssetCount);
+
+      console.log(
+        "Blockchain Asset ID:",
+        assetId
+      );
+
+      // =========================
+      // RESPONSE
+      // =========================
+
+      res.json({
+
+        message:
+          "File uploaded successfully!",
+
+        assetId:
+          assetId,
+
+        fileName:
+          req.file.originalname,
+
+        filePath:
+          req.file.path,
+
+        fileSize:
+          req.file.size,
+
+        fileHash:
+          fileHash,
+
+        transactionHash:
+          receipt.hash
+
       });
+
     }
 
-    const fileHash = crypto
-      .createHash("sha256")
-      .update(require("fs").readFileSync(req.file.path))
-      .digest("hex");
+    catch (error) {
 
-    const asset = new Asset({
-      fileName: req.file.originalname,
-      filePath: req.file.path,
-      fileSize: req.file.size,
-      fileHash: fileHash
-    });
+      console.error(
+        "UPLOAD ERROR:",
+        error
+      );
 
-    await asset.save();
+      res.status(500).json({
 
-    const tx = await contract.registerAsset(
-      req.file.originalname,
-      fileHash
+        message:
+          "File upload failed",
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+);
+
+// =========================
+// GET ASSET FROM BLOCKCHAIN
+// =========================
+
+app.get(
+  "/api/asset/:assetId",
+
+  async (req, res) => {
+
+    try {
+
+      const assetId =
+        req.params.assetId;
+
+      if (!assetId) {
+
+        return res.status(400).json({
+
+          message:
+            "Asset ID is required"
+
+        });
+
+      }
+
+      const asset =
+        await contract.assets(
+          assetId
+        );
+
+      res.json({
+
+        assetId:
+          assetId,
+
+        fileName:
+          asset[0],
+
+        fileHash:
+          asset[1],
+
+        owner:
+          asset[2],
+
+        timestamp:
+          Number(asset[3])
+
+      });
+
+    }
+
+    catch (error) {
+
+      console.error(
+        "GET ASSET ERROR:",
+        error
+      );
+
+      res.status(500).json({
+
+        message:
+          "Failed to get asset",
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+);
+
+// =========================
+// FILE VERIFICATION
+// =========================
+
+app.post(
+  "/api/verify",
+
+  upload.single("file"),
+
+  async (req, res) => {
+
+    try {
+
+      if (!req.file) {
+
+        return res.status(400).json({
+
+          message:
+            "No file uploaded"
+
+        });
+
+      }
+
+      const assetId =
+        req.body.assetId;
+
+      if (!assetId) {
+
+        return res.status(400).json({
+
+          message:
+            "Asset ID is required"
+
+        });
+
+      }
+
+      // =========================
+      // CREATE CURRENT HASH
+      // =========================
+
+      const fileHash =
+        crypto
+          .createHash("sha256")
+          .update(
+            fs.readFileSync(
+              req.file.path
+            )
+          )
+          .digest("hex");
+
+      console.log(
+        "\n=============================="
+      );
+
+      console.log(
+        "FILE VERIFICATION"
+      );
+
+      console.log(
+        "=============================="
+      );
+
+      console.log(
+        "Asset ID:",
+        assetId
+      );
+
+      console.log(
+        "Current Hash:",
+        fileHash
+      );
+
+      // =========================
+      // GET BLOCKCHAIN ASSET
+      // =========================
+
+      const blockchainAsset =
+        await contract.assets(
+          assetId
+        );
+
+      const blockchainFileHash =
+        blockchainAsset[1];
+
+      console.log(
+        "Blockchain Hash:",
+        blockchainFileHash
+      );
+
+      // =========================
+      // COMPARE HASHES
+      // =========================
+
+      const isVerified =
+        blockchainFileHash === fileHash;
+
+      console.log(
+        "Verification result:",
+        isVerified
+      );
+
+      // =========================
+      // RESPONSE
+      // =========================
+
+      res.json({
+
+        message:
+          isVerified
+            ? "File verified successfully!"
+            : "File has been tampered with!",
+
+        assetId:
+          Number(assetId),
+
+        fileHash:
+          fileHash,
+
+        blockchainHash:
+          blockchainFileHash,
+
+        verified:
+          isVerified
+
+      });
+
+    }
+
+    catch (error) {
+
+      console.error(
+        "VERIFICATION ERROR:",
+        error
+      );
+
+      res.status(500).json({
+
+        message:
+          "File verification failed",
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+);
+
+// =========================
+// GRANT ACCESS
+// =========================
+
+app.post(
+  "/api/access/grant",
+
+  async (req, res) => {
+
+    try {
+
+      const {
+        assetId,
+        userAddress
+      } = req.body;
+
+      if (
+        !assetId ||
+        !userAddress
+      ) {
+
+        return res.status(400).json({
+
+          message:
+            "Asset ID and user address are required"
+
+        });
+
+      }
+
+      console.log(
+        "\n=============================="
+      );
+
+      console.log(
+        "GRANT ACCESS"
+      );
+
+      console.log(
+        "=============================="
+      );
+
+      console.log(
+        "Asset ID:",
+        assetId
+      );
+
+      console.log(
+        "User:",
+        userAddress
+      );
+
+      const tx =
+        await contract.grantAccess(
+          assetId,
+          userAddress
+        );
+
+      console.log(
+        "Access grant transaction sent!"
+      );
+
+      console.log(
+        "Transaction hash:",
+        tx.hash
+      );
+
+      const receipt =
+        await tx.wait();
+
+      console.log(
+        "Access grant confirmed!"
+      );
+
+      res.json({
+
+        message:
+          "Access granted successfully!",
+
+        assetId:
+          assetId,
+
+        userAddress:
+          userAddress,
+
+        transactionHash:
+          receipt.hash
+
+      });
+
+    }
+
+    catch (error) {
+
+      console.error(
+        "GRANT ACCESS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+
+        message:
+          "Failed to grant access",
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+);
+
+// =========================
+// CHECK ACCESS
+// =========================
+
+app.post(
+  "/api/access/check",
+
+  async (req, res) => {
+
+    try {
+
+      const {
+        assetId,
+        userAddress
+      } = req.body;
+
+      if (
+        !assetId ||
+        !userAddress
+      ) {
+
+        return res.status(400).json({
+
+          message:
+            "Asset ID and user address are required"
+
+        });
+
+      }
+
+      console.log(
+        "\n=============================="
+      );
+
+      console.log(
+        "CHECK ACCESS"
+      );
+
+      console.log(
+        "=============================="
+      );
+
+      console.log(
+        "Asset ID:",
+        assetId
+      );
+
+      console.log(
+        "User:",
+        userAddress
+      );
+
+      const hasAccess =
+        await contract.checkAccess(
+          assetId,
+          userAddress
+        );
+
+      console.log(
+        "Access:",
+        hasAccess
+      );
+
+      res.json({
+
+        message:
+          "Access check completed!",
+
+        assetId:
+          assetId,
+
+        userAddress:
+          userAddress,
+
+        hasAccess:
+          hasAccess
+
+      });
+
+    }
+
+    catch (error) {
+
+      console.error(
+        "CHECK ACCESS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+
+        message:
+          "Failed to check access",
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+);
+
+// =========================
+// REVOKE ACCESS
+// =========================
+
+app.post(
+  "/api/access/revoke",
+
+  async (req, res) => {
+
+    try {
+
+      const {
+        assetId,
+        userAddress
+      } = req.body;
+
+      if (
+        !assetId ||
+        !userAddress
+      ) {
+
+        return res.status(400).json({
+
+          message:
+            "Asset ID and user address are required"
+
+        });
+
+      }
+
+      console.log(
+        "\n=============================="
+      );
+
+      console.log(
+        "REVOKE ACCESS"
+      );
+
+      console.log(
+        "=============================="
+      );
+
+      console.log(
+        "Asset ID:",
+        assetId
+      );
+
+      console.log(
+        "User:",
+        userAddress
+      );
+
+      const tx =
+        await contract.revokeAccess(
+          assetId,
+          userAddress
+        );
+
+      console.log(
+        "Revoke transaction sent!"
+      );
+
+      console.log(
+        "Transaction hash:",
+        tx.hash
+      );
+
+      const receipt =
+        await tx.wait();
+
+      console.log(
+        "Access revoke confirmed!"
+      );
+
+      res.json({
+
+        message:
+          "Access revoked successfully!",
+
+        assetId:
+          assetId,
+
+        userAddress:
+          userAddress,
+
+        transactionHash:
+          receipt.hash
+
+      });
+
+    }
+
+    catch (error) {
+
+      console.error(
+        "REVOKE ACCESS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+
+        message:
+          "Failed to revoke access",
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+);
+
+// =========================
+// START SERVER
+// =========================
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log("");
+
+    console.log(
+      "================================="
     );
 
-    const receipt = await tx.wait();
-
-    console.log("Blockchain transaction successful!");
-    console.log("Transaction hash:", receipt.hash);
-
-    res.json({
-      message: "File uploaded successfully!",
-      fileName: req.file.originalname,
-      filePath: req.file.path,
-      fileSize: req.file.size,
-      fileHash: fileHash,
-      transactionHash: receipt.hash
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "File upload failed",
-      error: error.message
-    });
-  }
-});
-
-// File verification
-app.post("/api/verify", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        message: "No file uploaded"
-      });
-    }
-
-    const assetId = req.body.assetId;
-
-    if (!assetId) {
-      return res.status(400).json({
-        message: "Asset ID is required"
-      });
-    }
-
-    const fileHash = crypto
-      .createHash("sha256")
-      .update(require("fs").readFileSync(req.file.path))
-      .digest("hex");
-
-    const isVerified = await contract.verifyAsset(
-      assetId,
-      fileHash
+    console.log(
+      "      CHAINGUARD BACKEND"
     );
 
-    res.json({
-      message: isVerified
-        ? "File verified successfully!"
-        : "File has been tampered with!",
-      fileHash: fileHash,
-      verified: isVerified
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "File verification failed",
-      error: error.message
-    });
-  }
-});
-
-// Test API
-app.post("/api/test", (req, res) => {
-  res.json({
-    message: "Backend API is working!",
-    data: req.body
-  });
-});
-
-// Grant access to a user
-app.post("/api/access/grant", async (req, res) => {
-  try {
-    const { assetId, userAddress } = req.body;
-
-    if (!assetId || !userAddress) {
-      return res.status(400).json({
-        message: "Asset ID and user address are required"
-      });
-    }
-
-    const tx = await contract.grantAccess(
-      assetId,
-      userAddress
+    console.log(
+      "================================="
     );
 
-    const receipt = await tx.wait();
+    console.log("");
 
-    console.log("Access grant transaction successful!");
-    console.log("Transaction hash:", receipt.hash);
-
-    res.json({
-      message: "Access granted successfully!",
-      assetId: assetId,
-      userAddress: userAddress,
-      transactionHash: receipt.hash
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Failed to grant access",
-      error: error.message
-    });
-  }
-});
-
-// Check access for a user
-app.post("/api/access/check", async (req, res) => {
-  try {
-    const { assetId, userAddress } = req.body;
-
-    if (!assetId || !userAddress) {
-      return res.status(400).json({
-        message: "Asset ID and user address are required"
-      });
-    }
-
-    const hasAccess = await contract.checkAccess(
-      assetId,
-      userAddress
+    console.log(
+      `Local: http://localhost:${PORT}`
     );
 
-    res.json({
-      message: "Access check completed!",
-      assetId: assetId,
-      userAddress: userAddress,
-      hasAccess: hasAccess
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Failed to check access",
-      error: error.message
-    });
-  }
-});
-
-// Revoke access from a user
-app.post("/api/access/revoke", async (req, res) => {
-  try {
-    const { assetId, userAddress } = req.body;
-
-    if (!assetId || !userAddress) {
-      return res.status(400).json({
-        message: "Asset ID and user address are required"
-      });
-    }
-
-    const tx = await contract.revokeAccess(
-      assetId,
-      userAddress
+    console.log(
+      `Port: ${PORT}`
     );
 
-    const receipt = await tx.wait();
+    console.log("");
 
-    console.log("Access revoke transaction successful!");
-    console.log("Transaction hash:", receipt.hash);
+    console.log(
+      "Backend server is running!"
+    );
 
-    res.json({
-      message: "Access revoked successfully!",
-      assetId: assetId,
-      userAddress: userAddress,
-      transactionHash: receipt.hash
-    });
+    console.log(
+      "================================="
+    );
 
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Failed to revoke access",
-      error: error.message
-    });
   }
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`ChainGuard server running on http://localhost:${PORT}`);
-});
+);
